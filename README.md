@@ -5,17 +5,18 @@
   <a href="README_zh.md">中文</a>
 </div>
 
-<!-- mcp-name: io.github.zwldarren/akshare-one-mcp -->
-
-[![smithery badge](https://smithery.ai/badge/@zwldarren/akshare-one-mcp)](https://smithery.ai/server/@zwldarren/akshare-one-mcp)
+<!-- mcp-name: io.github.MCU-UAV/akshare-one-mcp -->
 
 ## Overview
 
-An MCP server based on [akshare-one](https://github.com/zwldarren/akshare-one), providing comprehensive interfaces for China stock market data. It offers a set of powerful tools for retrieving financial information including historical stock data, real-time data, news data, and financial statements.
+A lightweight MCP server for common China stock market data. The default runtime uses Python standard-library HTTP clients against public data sources and does not require `akshare`, `pandas`, `numpy`, `lxml`, `mini-racer`, or `requests`. It is suitable for low-resource devices such as Raspberry Pi Zero 2W running MCP over stdio.
 
-<a href="https://glama.ai/mcp/servers/@zwldarren/akshare-one-mcp">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@zwldarren/akshare-one-mcp/badge" alt="akshare-one-mcp MCP server" />
-</a>
+Data sources currently used by the lightweight runtime:
+
+- Tencent: historical K-line and fallback realtime quotes
+- Sina: realtime quotes and financial reports
+- EastMoney: stock news and company announcements
+- Xueqiu: insider trading data
 
 ## Available Tools
 
@@ -33,8 +34,8 @@ Get historical stock market data with support for multiple time periods and adju
 - `start_date` (string, optional): Start date in YYYY-MM-DD format (default: '1970-01-01')
 - `end_date` (string, optional): End date in YYYY-MM-DD format (default: '2030-12-31')
 - `adjust` (string, optional): Adjustment type ('none', 'qfq', 'hfq') (default: 'none')
-- `source` (string, optional): Data source ('eastmoney', 'eastmoney_direct', 'sina') (default: 'eastmoney')
-- `indicators_list` (list, optional): Technical indicators to add
+- `source` (string, optional): Compatibility parameter; the lightweight runtime currently uses Tencent K-line data
+- `indicators_list` (list, optional): Technical indicators to add; lightweight runtime supports `SMA`, `EMA`, `RSI`, `MACD`, `BOLL`
 - `recent_n` (number, optional): Number of most recent records to return (default: 100)
 
 </details>
@@ -46,7 +47,7 @@ Get real-time stock market data.
 <summary>Parameters</summary>
 
 - `symbol` (string, optional): Stock code
-- `source` (string, optional): Data source ('xueqiu', 'eastmoney', 'eastmoney_direct') (default: 'eastmoney_direct')
+- `source` (string, optional): Data source (`sina`, `tencent`) (default: `sina`); legacy values `xueqiu`, `eastmoney`, and `eastmoney_direct` fall back to a lightweight available source
 
 </details>
 
@@ -59,6 +60,18 @@ Get stock-related news data.
 <summary>Parameters</summary>
 
 - `symbol` (string, required): Stock code
+- `recent_n` (number, optional): Number of most recent records to return (default: 10)
+
+</details>
+
+#### `get_announcement_data`
+Get listed-company announcements from EastMoney.
+
+<details>
+<summary>Parameters</summary>
+
+- `symbol` (string, required): Stock code
+- `category` (string, optional): Announcement category. One of `all`, `financial_report`, `financing`, `risk`, `info_change`, `major_event`, `restructuring`, `shareholding_change` (default: `all`)
 - `recent_n` (number, optional): Number of most recent records to return (default: 10)
 
 </details>
@@ -94,7 +107,7 @@ Get company cash flow statement data.
 <summary>Parameters</summary>
 
 - `symbol` (string, required): Stock code
-- `source` (string, optional): Data source (default: 'sina')
+- `source` (string, optional): Compatibility parameter; lightweight runtime uses Sina financial reports
 - `recent_n` (number, optional): Number of most recent records to return (default: 10)
 
 </details>
@@ -125,6 +138,18 @@ Get key financial metrics from the three major financial statements.
 #### `get_time_info`
 Get current time with ISO format, timestamp, and the last trading day.
 
+> The lightweight runtime estimates `last_trading_day` as the latest weekday. It does not account for exchange holidays.
+
+#### `get_api_health`
+Probe lightweight upstream API availability.
+
+<details>
+<summary>Parameters</summary>
+
+- `symbol` (string, optional): Stock code used for probing (default: `600519`)
+
+</details>
+
 ## Installation & Setup
 
 ### Running Modes
@@ -138,87 +163,100 @@ The server supports two modes: stdio and streamable-http
 
 > **Note:** When using streamable-http mode, the MCP server will be available at `http://{host}:{port}/mcp`. For the default configuration, this would be `http://0.0.0.0:8081/mcp`.
 
-### Installation Options
+### Raspberry Pi / Lightweight Stdio
 
-#### Option 1: Via Smithery
-To install akshare-one-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@zwldarren/akshare-one-mcp):
+For Raspberry Pi Zero 2W or other low-resource devices, prefer stdio mode:
 
 ```bash
-npx -y @smithery/cli install @zwldarren/akshare-one-mcp --client claude
+git clone https://github.com/MCU-UAV/akshare-one-mcp.git
+cd akshare-one-mcp
+uv sync --no-dev
+uv run akshare-one-mcp
 ```
 
-#### Option 2: Via `uv`
-Install [uv](<https://docs.astral.sh/uv/getting-started/installation/>) if you haven't already.
+The default install intentionally excludes heavy legacy data packages. If you need HTTP transport:
 
-Add the following configuration to your MCP Client settings:
+```bash
+uv sync --no-dev --extra http
+uv run akshare-one-mcp --streamable-http --host 0.0.0.0 --port 8081
+```
+
+The legacy `akshare-one` dependency remains available as an optional extra, but is not recommended on Raspberry Pi Zero 2W:
+
+```bash
+uv sync --extra legacy-akshare
+```
+
+### Hermes / MCP Client Configuration
+
+Use this stdio configuration in Hermes or any MCP client that accepts the standard `mcpServers` format:
+
+```json
+{
+  "mcpServers": {
+    "akshare-one-mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/absolute/path/to/akshare-one-mcp",
+        "run",
+        "akshare-one-mcp"
+      ]
+    }
+  }
+}
+```
+
+For a one-command GitHub install through `uvx`, use:
 
 ```json
 {
   "mcpServers": {
     "akshare-one-mcp": {
       "command": "uvx",
-      "args": ["akshare-one-mcp"]
+      "args": [
+        "--from",
+        "git+https://github.com/MCU-UAV/akshare-one-mcp.git",
+        "akshare-one-mcp"
+      ]
     }
   }
 }
 ```
 
-#### Option 3: Local Development Setup
+For streamable HTTP, start the server separately:
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/zwldarren/akshare-one-mcp.git
-   cd akshare-one-mcp
-   ```
+```bash
+uv sync --no-dev --extra http
+uv run akshare-one-mcp --streamable-http --host 0.0.0.0 --port 8081
+```
 
-2. Install dependencies:
-   ```bash
-   uv sync
-   ```
+Then point Hermes to the streamable HTTP endpoint:
 
-3. Add the following configuration to your MCP Client settings:
-   ```json
-   {
-     "mcpServers": {
-       "akshare-one-mcp": {
-         "command": "uv",
-         "args": [
-           "--directory",
-           "/path/to/akshare-one-mcp",
-           "run",
-           "akshare-one-mcp"
-         ]
-       }
-     }
-   }
-   ```
+```text
+http://<host>:8081/mcp
+```
+
+If your Hermes build expects JSON for HTTP MCP servers, use the equivalent URL form:
+
+```json
+{
+  "mcpServers": {
+    "akshare-one-mcp": {
+      "url": "http://<host>:8081/mcp"
+    }
+  }
+}
+```
 
 ## Technical Indicators Reference
 
-The `get_hist_data` tool supports the following technical indicators:
+The lightweight `get_hist_data` implementation currently supports these indicators natively:
 
-### Trend Indicators
-- **Moving Averages**: SMA (Simple Moving Average), EMA (Exponential Moving Average)
-- **Trend Tracking**: MACD (Moving Average Convergence Divergence), APO (Absolute Price Oscillator), PPO (Percentage Price Oscillator)
-- **Rate of Change**: ROC (Rate of Change), ROCP (Rate of Change Percentage), ROCR (Rate of Change Ratio), ROCR100
-- **Other**: TRIX (Triple Exponential Moving Average), ULTOSC (Ultimate Oscillator)
+- `SMA`: Simple Moving Average
+- `EMA`: Exponential Moving Average
+- `RSI`: Relative Strength Index
+- `MACD`: Moving Average Convergence Divergence, including `macd`, `signal`, and `histogram`
+- `BOLL`: Bollinger Bands, including `boll_upper`, `boll_middle`, and `boll_lower`
 
-### Momentum Indicators
-- **Relative Strength**: RSI (Relative Strength Index), CCI (Commodity Channel Index)
-- **Trend Strength**: ADX (Average Directional Index), DX (Directional Index)
-- **Money Flow**: MFI (Money Flow Index), MOM (Momentum), CMO (Chande Momentum Oscillator), WILLR (Williams %R)
-
-### Volatility Indicators
-- **Bollinger Bands**: BOLL (Bollinger Bands)
-- **Average True Range**: ATR (Average True Range)
-- **Parabolic SAR**: SAR (Parabolic Stop and Reverse)
-
-### Volume Indicators
-- **Volume**: OBV (On-Balance Volume), AD (Accumulation/Distribution Line), ADOSC (Accumulation/Distribution Oscillator)
-
-### Other Indicators
-- **Stochastic**: STOCH (Stochastic Oscillator)
-- **Aroon**: AROON (Aroon Indicator), AROONOSC (Aroon Oscillator)
-- **Balance of Power**: BOP (Balance of Power)
-- **Directional Indicators**: MINUS_DI, MINUS_DM, PLUS_DI, PLUS_DM
-- **Time Series Forecast**: TSF (Time Series Forecast)
+Other accepted indicator names are ignored to avoid pulling in TA-Lib, pandas, or numpy.
