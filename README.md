@@ -13,14 +13,24 @@ A lightweight MCP server for common China stock market data. The default runtime
 
 Data sources currently used by the lightweight runtime:
 
-- Tencent: historical K-line and fallback realtime quotes
+- Tencent: historical K-line, detailed stock snapshots, index quotes, and fallback realtime quotes
 - Sina: realtime quotes and financial reports
-- EastMoney: stock news and company announcements
+- EastMoney: stock news, company announcements, and money flow
 - Xueqiu: insider trading data
 
 ## Available Tools
 
 ### Market Data Tools
+
+#### `get_index_data`
+Get realtime quotes for common China A-share indices.
+
+<details>
+<summary>Parameters</summary>
+
+- `symbols` (list, optional): Index symbols or aliases. Examples: `sh000001`, `399001`, `399006`, `csi300`, `csi500`, `csi1000`. Defaults to major indices.
+
+</details>
 
 #### `get_hist_data`
 Get historical stock market data with support for multiple time periods and adjustment methods.
@@ -51,6 +61,16 @@ Get real-time stock market data.
 
 </details>
 
+#### `get_stock_snapshot`
+Get detailed stock quote snapshot with bid/ask levels.
+
+<details>
+<summary>Parameters</summary>
+
+- `symbol` (string, required): Stock code
+
+</details>
+
 ### News & Information Tools
 
 #### `get_news_data`
@@ -73,6 +93,19 @@ Get listed-company announcements from EastMoney.
 - `symbol` (string, required): Stock code
 - `category` (string, optional): Announcement category. One of `all`, `financial_report`, `financing`, `risk`, `info_change`, `major_event`, `restructuring`, `shareholding_change` (default: `all`)
 - `recent_n` (number, optional): Number of most recent records to return (default: 10)
+
+</details>
+
+### Capital Flow Tools
+
+#### `get_money_flow_data`
+Get daily stock money flow data from EastMoney.
+
+<details>
+<summary>Parameters</summary>
+
+- `symbol` (string, required): Stock code
+- `recent_n` (number, optional): Number of most recent records to return (default: 20)
 
 </details>
 

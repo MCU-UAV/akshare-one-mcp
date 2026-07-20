@@ -29,6 +29,13 @@ TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
 TENCENT_FQ_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 EASTMONEY_NEWS_URL = "https://search-api-web.eastmoney.com/search/jsonp"
 EASTMONEY_ANNOUNCEMENT_URL = "https://np-anotice-stock.eastmoney.com/api/security/ann"
+EASTMONEY_MONEY_FLOW_URLS = [
+    "https://push2.eastmoney.com/api/qt/stock/fflow/daykline/get",
+    "https://82.push2.eastmoney.com/api/qt/stock/fflow/daykline/get",
+    "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get",
+    "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get",
+    "https://82.push2.eastmoney.com/api/qt/stock/fflow/kline/get",
+]
 SINA_FINANCE_REPORT_URL = (
     "https://quotes.sina.cn/cn/api/openapi.php/"
     "CompanyFinanceService.getFinanceReport2022"
@@ -36,6 +43,35 @@ SINA_FINANCE_REPORT_URL = (
 XUEQIU_INSIDER_URL = "https://xueqiu.com/service/v5/stock/f10/cn/skholderchg"
 
 Record = dict[str, Any]
+
+INDEX_SYMBOLS = {
+    "sh000001": "sh000001",
+    "000001": "sh000001",
+    "shanghai": "sh000001",
+    "sse": "sh000001",
+    "上证指数": "sh000001",
+    "sz399001": "sz399001",
+    "399001": "sz399001",
+    "shenzhen": "sz399001",
+    "szse": "sz399001",
+    "深证成指": "sz399001",
+    "sz399006": "sz399006",
+    "399006": "sz399006",
+    "chinext": "sz399006",
+    "创业板指": "sz399006",
+    "sh000300": "sh000300",
+    "000300": "sh000300",
+    "csi300": "sh000300",
+    "沪深300": "sh000300",
+    "sh000905": "sh000905",
+    "000905": "sh000905",
+    "csi500": "sh000905",
+    "中证500": "sh000905",
+    "sh000852": "sh000852",
+    "000852": "sh000852",
+    "csi1000": "sh000852",
+    "中证1000": "sh000852",
+}
 
 
 def _json_records(records: list[Record]) -> str:
@@ -97,6 +133,20 @@ def _with_exchange_prefix(symbol: str) -> str:
     if code.startswith(("43", "83", "87", "88", "92")):
         return f"bj{code}"
     return f"sz{code}"
+
+
+def _normalize_index_symbol(symbol: str) -> str:
+    key = symbol.strip().lower()
+    return INDEX_SYMBOLS.get(key, _with_exchange_prefix(symbol))
+
+
+def _eastmoney_secid(symbol: str) -> str:
+    stock = _with_exchange_prefix(symbol)
+    if stock.startswith("sh"):
+        return f"1.{stock[2:]}"
+    if stock.startswith("bj"):
+        return f"0.{stock[2:]}"
+    return f"0.{stock[2:]}"
 
 
 def _market_code_for_sina(symbol: str) -> str:
@@ -229,6 +279,88 @@ def _get_tencent_realtime_data(symbol: str | None) -> list[Record]:
             "prev_close": _to_float(fields[4]),
         }
     ]
+
+
+def _fetch_tencent_quote(symbol: str) -> list[str]:
+    text = _http_get_text(
+        TENCENT_REALTIME_URL.format(symbols=symbol),
+        encoding="GBK",
+        headers={"Referer": "https://gu.qq.com/"},
+    )
+    _, _, quoted = text.partition('="')
+    payload = quoted.rsplit('";', 1)[0]
+    fields = payload.split("~") if payload else []
+    if len(fields) < 49 or not fields[1]:
+        raise ValueError(f"Empty quote data returned from Tencent for {symbol}")
+    return fields
+
+
+def _quote_timestamp(value: str) -> str | None:
+    try:
+        return datetime.strptime(value, "%Y%m%d%H%M%S").replace(tzinfo=CN_TZ).isoformat()
+    except ValueError:
+        return None
+
+
+def _get_stock_snapshot_record(symbol: str) -> Record:
+    stock = _with_exchange_prefix(symbol)
+    fields = _fetch_tencent_quote(stock)
+    return {
+        "symbol": _strip_exchange_prefix(symbol),
+        "name": fields[1],
+        "price": _to_float(fields[3]),
+        "prev_close": _to_float(fields[4]),
+        "open": _to_float(fields[5]),
+        "change": _to_float(fields[31]),
+        "pct_change": _to_float(fields[32]),
+        "high": _to_float(fields[33]),
+        "low": _to_float(fields[34]),
+        "volume": (_to_float(fields[36]) or 0.0) * 100,
+        "amount": (_to_float(fields[37]) or 0.0) * 10000,
+        "turnover_rate": _to_float(fields[38]),
+        "pe_ttm": _to_float(fields[39]),
+        "amplitude": _to_float(fields[43]),
+        "market_cap": (_to_float(fields[45]) or 0.0) * 100000000,
+        "float_market_cap": (_to_float(fields[44]) or 0.0) * 100000000,
+        "pb": _to_float(fields[46]),
+        "limit_up": _to_float(fields[47]),
+        "limit_down": _to_float(fields[48]),
+        "timestamp": _quote_timestamp(fields[30]),
+        "bid_levels": [
+            {"price": _to_float(fields[index]), "volume": (_to_float(fields[index + 1]) or 0.0) * 100}
+            for index in (9, 11, 13, 15, 17)
+        ],
+        "ask_levels": [
+            {"price": _to_float(fields[index]), "volume": (_to_float(fields[index + 1]) or 0.0) * 100}
+            for index in (19, 21, 23, 25, 27)
+        ],
+    }
+
+
+def _get_index_records(symbols: list[str]) -> list[Record]:
+    records: list[Record] = []
+    for symbol in symbols:
+        stock = _normalize_index_symbol(symbol)
+        fields = _fetch_tencent_quote(stock)
+        records.append(
+            {
+                "symbol": stock,
+                "name": fields[1],
+                "price": _to_float(fields[3]),
+                "prev_close": _to_float(fields[4]),
+                "open": _to_float(fields[5]),
+                "change": _to_float(fields[31]),
+                "pct_change": _to_float(fields[32]),
+                "high": _to_float(fields[33]),
+                "low": _to_float(fields[34]),
+                "volume": _to_float(fields[36]),
+                "amount": (_to_float(fields[37]) or 0.0) * 10000,
+                "turnover_rate": _to_float(fields[38]),
+                "amplitude": _to_float(fields[43]),
+                "timestamp": _quote_timestamp(fields[30]),
+            }
+        )
+    return records
 
 
 def _get_realtime_data(symbol: str | None, source: str) -> list[Record]:
@@ -537,6 +669,65 @@ def _get_announcement_records(
                 ),
             }
         )
+    return records
+
+
+def _get_money_flow_records(symbol: str) -> list[Record]:
+    params = {
+        "lmt": "0",
+        "klt": "101",
+        "secid": _eastmoney_secid(symbol),
+        "fields1": "f1,f2,f3,f7",
+        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63",
+    }
+    headers = {
+        "Accept": "application/json,text/plain,*/*",
+        "Referer": "https://data.eastmoney.com/zjlx/",
+    }
+    last_error: Exception | None = None
+    payload: dict[str, Any] | None = None
+    for url in EASTMONEY_MONEY_FLOW_URLS:
+        try:
+            candidate = _http_get_json(url, params, headers=headers)
+            if (candidate.get("data") or {}).get("klines"):
+                payload = candidate
+                break
+        except Exception as exc:
+            last_error = exc
+    if payload is None:
+        if last_error:
+            raise last_error
+        return []
+
+    data = payload.get("data") or {}
+    records: list[Record] = []
+    for line in data.get("klines") or []:
+        fields = line.split(",")
+        if len(fields) < 6:
+            continue
+        record = {
+            "symbol": data.get("code") or _strip_exchange_prefix(symbol),
+            "name": data.get("name"),
+            "date": fields[0],
+            "main_net_inflow": _to_float(fields[1]),
+            "small_net_inflow": _to_float(fields[2]),
+            "medium_net_inflow": _to_float(fields[3]),
+            "large_net_inflow": _to_float(fields[4]),
+            "super_large_net_inflow": _to_float(fields[5]),
+        }
+        if len(fields) >= 13:
+            record.update(
+                {
+                    "main_net_inflow_pct": _to_float(fields[6]),
+                    "small_net_inflow_pct": _to_float(fields[7]),
+                    "medium_net_inflow_pct": _to_float(fields[8]),
+                    "large_net_inflow_pct": _to_float(fields[9]),
+                    "super_large_net_inflow_pct": _to_float(fields[10]),
+                    "close": _to_float(fields[11]),
+                    "pct_change": _to_float(fields[12]),
+                }
+            )
+        records.append(record)
     return records
 
 
@@ -876,6 +1067,27 @@ def get_realtime_data(
 
 
 @mcp.tool
+def get_stock_snapshot(
+    symbol: Annotated[str, Field(description="Stock symbol/ticker (e.g. '000001')")],
+) -> str:
+    """Get detailed stock quote snapshot with bid/ask levels."""
+    return _json_records([_get_stock_snapshot_record(symbol)])
+
+
+@mcp.tool
+def get_index_data(
+    symbols: Annotated[
+        list[str] | None,
+        Field(description="Index symbols or aliases, e.g. ['sh000001','399006','csi300']"),
+    ] = None,
+) -> str:
+    """Get realtime index quotes for common China A-share indices."""
+    if symbols is None:
+        symbols = ["sh000001", "sz399001", "sz399006", "sh000300", "sh000905"]
+    return _json_records(_get_index_records(symbols))
+
+
+@mcp.tool
 def get_news_data(
     symbol: Annotated[str, Field(description="Stock symbol/ticker (e.g. '000001')")],
     recent_n: Annotated[
@@ -911,6 +1123,20 @@ def get_announcement_data(
 ) -> str:
     """Get company announcements from EastMoney."""
     return _json_records(_get_announcement_records(symbol, category, recent_n))
+
+
+@mcp.tool
+def get_money_flow_data(
+    symbol: Annotated[str, Field(description="Stock symbol/ticker (e.g. '000001')")],
+    recent_n: Annotated[
+        int | None, Field(description="Number of most recent records to return", ge=1)
+    ] = 20,
+) -> str:
+    """Get daily stock money flow data from EastMoney."""
+    records = _get_money_flow_records(symbol)
+    if recent_n is not None:
+        records = records[-recent_n:]
+    return _json_records(records)
 
 
 @mcp.tool
@@ -1001,6 +1227,8 @@ def get_api_health(
     checks = [
         _health_check("sina_realtime", lambda: _get_sina_realtime_data(symbol)),
         _health_check("tencent_realtime", lambda: _get_tencent_realtime_data(symbol)),
+        _health_check("tencent_snapshot", lambda: [_get_stock_snapshot_record(symbol)]),
+        _health_check("tencent_index", lambda: _get_index_records(["sh000001"])),
         _health_check(
             "tencent_hist",
             lambda: _get_hist_data(
@@ -1017,6 +1245,7 @@ def get_api_health(
             "eastmoney_announcement",
             lambda: _get_announcement_records(symbol, "all", 1),
         ),
+        _health_check("eastmoney_money_flow", lambda: _get_money_flow_records(symbol)[-1:]),
         _health_check(
             "sina_financial_report",
             lambda: _get_financial_report(symbol, "balance", BALANCE_MAPPING)[:1],

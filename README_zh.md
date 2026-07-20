@@ -9,9 +9,9 @@
 
 当前轻量运行时使用的数据源：
 
-- 腾讯：历史 K 线和实时行情备用源
+- 腾讯：历史 K 线、个股详细快照、指数行情和实时行情备用源
 - 新浪：实时行情和财务报表
-- 东方财富：股票新闻和公司公告
+- 东方财富：股票新闻、公司公告和资金流向
 - 雪球：内部交易数据
 
 ## 功能特性
@@ -20,12 +20,22 @@
 - **实时数据**: 提供实时股票行情信息
 - **新闻资讯**: 获取股票相关的最新新闻资讯
 - **公司公告**: 获取上市公司公告，支持财务报告、重大事项、风险提示等分类
+- **资金流向**: 获取个股日级主力、大单、中单、小单资金流向
 - **财务报表**: 查看公司资产负债表、利润表、现金流量表
 - **分析指标**: 计算关键财务指标和技术分析指标
 
 ## 工具说明
 
 ### 市场数据
+
+#### `get_index_data` - 获取指数行情
+
+<details>
+<summary>参数说明</summary>
+
+- `symbols` (list, 可选): 指数代码或别名，例如 `sh000001`、`399001`、`399006`、`csi300`、`csi500`、`csi1000`；默认返回主要指数
+
+</details>
 
 #### `get_hist_data` - 获取历史股票数据
 获取指定股票的历史行情数据，支持多种数据源和复权方式。
@@ -54,6 +64,15 @@
 
 </details>
 
+#### `get_stock_snapshot` - 获取个股详细快照
+
+<details>
+<summary>参数说明</summary>
+
+- `symbol` (string, 必填): 股票代码
+
+</details>
+
 ### 新闻资讯
 
 #### `get_news_data` - 获取股票新闻
@@ -74,6 +93,18 @@
 - `symbol` (string, 必填): 股票代码
 - `category` (string, 可选): 公告分类，可选值：'all'、'financial_report'、'financing'、'risk'、'info_change'、'major_event'、'restructuring'、'shareholding_change'，默认 'all'
 - `recent_n` (number, 可选): 返回最新记录数，默认 10
+
+</details>
+
+### 资金流向
+
+#### `get_money_flow_data` - 获取个股资金流向
+
+<details>
+<summary>参数说明</summary>
+
+- `symbol` (string, 必填): 股票代码
+- `recent_n` (number, 可选): 返回最新记录数，默认 20
 
 </details>
 
