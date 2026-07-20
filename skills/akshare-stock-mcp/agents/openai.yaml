@@ -1,0 +1,7 @@
+interface:
+  display_name: "AKShare Stock MCP"
+  short_description: "Query China stock data via MCP"
+  default_prompt: "Use $akshare-stock-mcp to summarize 600519 with realtime quote, recent K-line trend, news, announcements, and financial highlights."
+
+policy:
+  allow_implicit_invocation: true
