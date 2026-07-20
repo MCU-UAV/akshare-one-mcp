@@ -9,7 +9,7 @@ COPY src ./src
 
 # Install build tools and package
 RUN pip install --upgrade pip setuptools build wheel \
-    && pip install .
+    && pip install ".[http]"
 
 # Expose port for HTTP server
 EXPOSE 8081

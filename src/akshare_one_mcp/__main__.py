@@ -1,7 +1,5 @@
 import argparse
 import logging
-import uvicorn
-from starlette.middleware.cors import CORSMiddleware
 
 from akshare_one_mcp.server import mcp
 
@@ -10,6 +8,8 @@ logger = logging.getLogger(__name__)
 
 
 def create_streamable_http_app():
+    from starlette.middleware.cors import CORSMiddleware
+
     app = mcp.http_app()
     app.add_middleware(
         CORSMiddleware,  # type: ignore[arg-type]
@@ -40,6 +40,8 @@ def main():
     args = parser.parse_args()
 
     if args.streamable_http:
+        import uvicorn
+
         # HTTP mode for streamable HTTP
         print("MCP Server starting in HTTP mode...")
         app = create_streamable_http_app()

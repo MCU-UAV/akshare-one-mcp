@@ -7,11 +7,17 @@ license = { text = "MIT" }
 authors = [{ name = "zwldarren", email = "zwldarren@gmail.com" }]
 requires-python = ">=3.12"
 dependencies = [
-    "akshare-one>=0.3.14",
     "fastmcp>=2.11.3",
-    "uvicorn>=0.35.0"
 ]
 keywords = ["akshare", "stock", "mcp", "mcp-server"]
+
+[project.optional-dependencies]
+http = [
+    "uvicorn>=0.35.0",
+]
+legacy-akshare = [
+    "akshare-one>=0.3.14",
+]
 
 [dependency-groups]
 dev = [
